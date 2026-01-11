@@ -24,9 +24,13 @@
   ○ 角色：生命周期结束
 
 二、生命周期推进规则
+
 ● Uploaded → Active：上传完成并校验通过
+
 ● Active → Expired：达到业务失效条件（时间 / 规则）
+
 ● Expired → Recycled：系统确认进入删除流程
+
 ● Recycled → Destroyed：物理删除成功
 
 三、生命周期的核心约束（压缩成 3 条）
