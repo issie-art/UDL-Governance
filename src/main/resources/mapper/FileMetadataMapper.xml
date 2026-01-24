@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jx.file.mapper.FileMetadataMapper">
+
+    <resultMap id="BaseResultMap" type="com.jx.file.model.FileMetadata">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="file_name" column="file_name" jdbcType="VARCHAR"/>
+            <result property="file_size" column="file_size" jdbcType="BIGINT"/>
+            <result property="hash" column="hash" jdbcType="VARCHAR"/>
+            <result property="status" column="status" jdbcType="VARCHAR"/>
+            <result property="storage_type" column="storage_type" jdbcType="VARCHAR"/>
+            <result property="file_key" column="file_key" jdbcType="VARCHAR"/>
+            <result property="created_at" column="created_at" jdbcType="TIMESTAMP"/>
+            <result property="updated_at" column="updated_at" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,file_name,file_size,
+        hash,status,storage_type,
+        file_key,created_at,updated_at
+    </sql>
+</mapper>
