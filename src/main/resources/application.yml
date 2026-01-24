@@ -1,0 +1,39 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+spring:
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 10240MB
+  application:
+    name: file-upload
+  #mysql
+  datasource:
+    url: jdbc:mysql://localhost:3306/file_center_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: jx20021023.
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  #redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+# MyBatis-Plus配置
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+# 日志配置
+logging:
+  level:
+    com.jx.file: debug
+    org.springframework.web: debug
+file:
+  chunk:
+    size: 10485760  # 分片大小，10MB (10*1024*1024)
+    max-count: 10000  # 最大分片数量
+    min-size: 1024  # 最小分片大小，1KB
+    max-file-size: 10737418240  # 最大文件大小，10GB (10*1024*1024*1024)
+
