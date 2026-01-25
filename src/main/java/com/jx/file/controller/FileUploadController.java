@@ -31,13 +31,11 @@ public class FileUploadController {
     public BaseResponse<UploadChunkResponse> uploadChunk(
             @RequestParam("uploadId") String uploadId,
             @RequestParam("chunkIndex") Integer chunkIndex,
-            @RequestParam("chunkSize") Long chunkSize,
             @RequestParam("file") MultipartFile file) throws IOException {
 
         UploadChunkRequest request = new UploadChunkRequest();
         request.setUploadId(uploadId);
         request.setChunkIndex(chunkIndex);
-        request.setChunkSize(chunkSize);
 
         return fileUploadService.uploadChunk(request, file);
     }
