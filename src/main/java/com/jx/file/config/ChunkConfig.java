@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 public class ChunkConfig {
 
     /**
-     * 默认分片大小（字节），默认为10MB
+     *  默认分片大小（字节），默认为10MB
      */
     private Long size;
 

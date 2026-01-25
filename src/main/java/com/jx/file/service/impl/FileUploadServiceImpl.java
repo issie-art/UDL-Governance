@@ -28,7 +28,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -70,10 +69,11 @@ public class FileUploadServiceImpl implements FileUploadService {
         String uploadId = generateUploadId();
 
         // 存储信息到 Redis
-        Map<String, Object> uploadInfo = new ConcurrentHashMap<>();
+        Map<String, Object> uploadInfo = new HashMap<>();
         uploadInfo.put("fileSize", request.getFileSize());
         uploadInfo.put("totalChunks", totalChunks);
         uploadInfo.put("createdAt", System.currentTimeMillis());
+        uploadInfo.put("fileName", request.getFileName());
 
         redisUtil.setByString(UPLOAD_INFO_KEY + uploadId, uploadInfo, 48, TimeUnit.HOURS);
 
@@ -88,11 +88,12 @@ public class FileUploadServiceImpl implements FileUploadService {
 
         String uploadId = request.getUploadId();
         Integer chunkIndex = request.getChunkIndex();
+        long maxChunkSize = chunkConfig.getSize();
 
         // 1. 校验 uploadId 是否存在
         Map<String, Object> uploadInfo = (Map<String, Object>) redisUtil.getByString(UPLOAD_INFO_KEY + uploadId);
         if (uploadInfo == null) {
-            log.error("Invalid or expired uploadId: {}", uploadId);
+            log.warn("Invalid or expired uploadId: {}", uploadId);
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "Invalid or expired uploadId");
         }
 
@@ -100,21 +101,20 @@ public class FileUploadServiceImpl implements FileUploadService {
 
         // 2. 校验 chunkIndex 合法性
         if (chunkIndex < 0 || chunkIndex >= totalChunks) {
-            log.error("Invalid chunkIndex: {}", chunkIndex);
+            log.warn("Invalid chunkIndex: {}", chunkIndex);
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "Invalid chunkIndex");
         }
 
-        // 3. 校验分片大小
-        long actualSize = file.getSize();
-        if (!actualSizeEquals(request.getChunkSize(), actualSize)) {
-            log.error("Chunk size mismatch: {} != {}", request.getChunkSize(), actualSize);
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Chunk size mismatch");
+        // 3. 校验 chunkSize 合法性
+        if (file.getSize() > maxChunkSize) {
+            log.warn("Invalid chunk size: {}", file.getSize());
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Invalid chunk size");
         }
 
         // 4. 创建目录
         File uploadTempDir = new File(BASE_TEMP_DIR, uploadId);
         if (!uploadTempDir.exists() && !uploadTempDir.mkdirs()) {
-            log.error("Failed to create upload directory: {}", BASE_TEMP_DIR);
+            log.warn("Failed to create upload directory: {}", BASE_TEMP_DIR);
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "Failed to create upload directory");
         }
 
@@ -175,6 +175,8 @@ public class FileUploadServiceImpl implements FileUploadService {
         Map<String, Object> uploadInfo = (Map<String, Object>) uploadInfoObj;
         // 获取分片总数
         Integer totalChunks = (Integer) uploadInfo.get("totalChunks");
+        // 获取文件名
+        String fileName = (String) uploadInfo.get("fileName");
 
         if (totalChunks == null) {
             CompleteUploadResponse response = new CompleteUploadResponse();
@@ -212,7 +214,7 @@ public class FileUploadServiceImpl implements FileUploadService {
         }
         // 所有分片齐全，提交异步合并
         response.setStatus("COMPLETED");
-        fileMergeExecutor.submit(() -> mergeFile(uploadId, totalChunks, request.getFileName()));
+        fileMergeExecutor.submit(() -> mergeFile(uploadId, totalChunks, fileName));
 
         return ResultUtils.success(response);
     }
@@ -256,9 +258,18 @@ public class FileUploadServiceImpl implements FileUploadService {
         }
 
 
-        String[] parts = fileName.split("\\.(?=[^.]*$)"); // 使用正则表达式从最后一个点分割
-        String namePart = parts[0];         // "J.X"
-        String extensionPart = parts[1];//txt
+        String namePart;
+        String extensionPart;
+        int lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex > 0 && lastDotIndex < fileName.length() - 1) {
+            namePart = fileName.substring(0, lastDotIndex);
+            extensionPart = fileName.substring(lastDotIndex + 1);
+        } else {
+            // 没有后缀的情况
+            namePart = fileName;
+            extensionPart = "txt"; // 或者给默认值
+        }
+
         // 创建临时合并文件路径和最终合并文件的路径
         Path tempMergedFile = Paths.get(BASE_TEMP_DIR, uploadId + "." + extensionPart);
         Path finalMergedFile = Paths.get(BASE_TEMP_DIR, namePart + "." + extensionPart);
@@ -351,6 +362,7 @@ public class FileUploadServiceImpl implements FileUploadService {
 
         // 检查是否超出最大分片数量限制
         if (totalChunks > chunkConfig.getMaxCount()) {
+            log.warn("File chunks exceed maximum limit: {}", chunkConfig.getMaxCount());
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "File chunks exceed maximum limit: " + chunkConfig.getMaxCount(
             ));
         }
@@ -363,6 +375,7 @@ public class FileUploadServiceImpl implements FileUploadService {
      */
     private void validateFileSize(Long fileSize) {
         if (fileSize > chunkConfig.getMaxFileSize()) {
+            log.warn("File size exceeds maximum limit: {}", chunkConfig.getMaxFileSize());
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "File size exceeds maximum limit: " + chunkConfig.getMaxFileSize() + " bytes");
         }
     }
@@ -374,7 +387,4 @@ public class FileUploadServiceImpl implements FileUploadService {
         return UUID.randomUUID().toString();
     }
 
-    private boolean actualSizeEquals(Long declared, long actual) {
-        return declared == null || declared == actual;
-    }
 }
