@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.jx.file.mapper.FileMetadataMapper">
+<mapper namespace="cn.udl.governance.mapper.FileMetadataMapper">
 
-    <resultMap id="BaseResultMap" type="com.jx.file.model.FileMetadata">
+    <resultMap id="BaseResultMap" type="cn.udl.governance.model.FileMetadata">
             <id property="id" column="id" jdbcType="BIGINT"/>
             <result property="file_name" column="file_name" jdbcType="VARCHAR"/>
             <result property="file_size" column="file_size" jdbcType="BIGINT"/>
