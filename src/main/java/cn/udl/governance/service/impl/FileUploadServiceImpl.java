@@ -4,29 +4,30 @@ import cn.udl.governance.common.BaseResponse;
 import cn.udl.governance.common.ErrorCode;
 import cn.udl.governance.config.ChunkConfig;
 import cn.udl.governance.exception.BusinessException;
+import cn.udl.governance.enums.FileStatusEnum;
+import cn.udl.governance.manager.FileStorageService;
+import cn.udl.governance.model.FileMetadata;
 import cn.udl.governance.model.dto.CompleteUploadRequest;
 import cn.udl.governance.model.dto.InitUploadRequest;
 import cn.udl.governance.model.dto.UploadChunkRequest;
 import cn.udl.governance.model.vo.CompleteUploadResponse;
 import cn.udl.governance.model.vo.InitUploadResponse;
 import cn.udl.governance.model.vo.UploadChunkResponse;
+import cn.udl.governance.service.FileMetadataService;
 import cn.udl.governance.service.FileUploadService;
 import cn.udl.governance.utils.FileMergeExecutor;
 import cn.udl.governance.utils.RedisUtil;
 import cn.udl.governance.utils.ResultUtils;
+import cn.hutool.crypto.digest.DigestUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -40,6 +41,12 @@ public class FileUploadServiceImpl implements FileUploadService {
     private ChunkConfig chunkConfig;
     @Resource
     private FileMergeExecutor fileMergeExecutor;
+
+    @Resource
+    private FileStorageService fileStorageService;
+
+    @Resource
+    private FileMetadataService fileMetadataService;
 
     private static final String UPLOAD_INFO_KEY = "upload_info:";
     private static final String CHUNK_RECORD_KEY = "chunk_record:";
@@ -244,76 +251,93 @@ public class FileUploadServiceImpl implements FileUploadService {
 
 
     /**
-     * 合并文件的方法
+     * 合并文件的方法，并上传至 MinIO 存储，同步记录元数据
+     * 该方法主要完成以下功能：
+     * 1. 检查并获取上传目录
+     * 2. 处理文件名和扩展名
+     * 3. 创建临时合并文件并合并所有分片
+     * 4. 上传合并后的文件到 MinIO
+     * 5. 清理临时文件和分片目录
+     * @param uploadId 上传任务的唯一标识符
+     * @param totalChunks 分片的总数量
+     * @param fileName 原始文件名
      */
     private void mergeFile(String uploadId, int totalChunks, String fileName) {
 
         // 构建上传文件的临时目录路径
         Path uploadDir = Paths.get(BASE_TEMP_DIR, uploadId);
 
-        // 检查上传临时目录是否存在，如果不存在则记录警告日志并返回
+        // 检查上传临时目录是否存在，如果不存在则记录警告并返回
         if (!Files.exists(uploadDir)) {
             log.warn("Upload temp dir not exists: {}", uploadDir);
             return;
         }
 
-
-        String namePart;
+        // 处理文件扩展名，如果没有扩展名则默认使用 "txt"
         String extensionPart;
         int lastDotIndex = fileName.lastIndexOf('.');
         if (lastDotIndex > 0 && lastDotIndex < fileName.length() - 1) {
-            namePart = fileName.substring(0, lastDotIndex);
             extensionPart = fileName.substring(lastDotIndex + 1);
         } else {
-            // 没有后缀的情况
-            namePart = fileName;
-            extensionPart = "txt"; // 或者给默认值
+            extensionPart = "txt";
         }
 
-        // 创建临时合并文件路径和最终合并文件的路径
+        // 1. 创建临时合并文件，使用上传ID和扩展名构建文件名
         Path tempMergedFile = Paths.get(BASE_TEMP_DIR, uploadId + "." + extensionPart);
-        Path finalMergedFile = Paths.get(BASE_TEMP_DIR, namePart + "." + extensionPart);
 
-        try (OutputStream out = new BufferedOutputStream(
-                Files.newOutputStream(tempMergedFile))) {
-
-            // 遍历所有分片文件
+        // 使用 try-with-resources 确保输出流正确关闭
+        try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempMergedFile))) {
+            // 遍历所有分片文件，按顺序合并
             for (int i = 0; i < totalChunks; i++) {
-                // 构建当前分片的文件路径
                 Path chunkPath = uploadDir.resolve(i + ".chunk");
-
-                // 检查分片文件是否存在，如果不存在则记录错误日志并返回
+                // 检查分片文件是否存在，如果不存在则记录错误并返回
                 if (!Files.exists(chunkPath)) {
                     log.error("Missing chunk file: {}", chunkPath);
                     return;
                 }
-
-                // 将分片文件复制到输出流中
+                // 将分片文件复制到输出流中，实现文件合并
                 Files.copy(chunkPath, out);
             }
-
         } catch (IOException e) {
-            // 合并过程中发生异常时记录错误日志并返回
+            // 合并过程中发生异常，记录错误日志并返回
             log.error("Merge failed for uploadId: {}", uploadId, e);
             return;
         }
 
         try {
-            // 原子性提交
-            Files.move(
-                    tempMergedFile,
-                    finalMergedFile,
-                    StandardCopyOption.REPLACE_EXISTING,//如果目标文件已存在，会自动替换
-                    StandardCopyOption.ATOMIC_MOVE//原子性移动，保证文件移动操作的原子性
-            );
-        } catch (IOException e) {
-            log.error("Failed to finalize merged file", e);
-            return;
-        }
 
-        // 清理
-        cleanup(uploadId);
-        log.info("Merge success, uploadId={}", uploadId);
+            // 3. 上传到 MinIO 正式存储区
+            // 构建在 MinIO 中的对象名称
+            String objectName = "files/" + uploadId + "/" + fileName;
+            // 使用 try-with-resources 确保输入流正确关闭
+            try (InputStream is = new BufferedInputStream(Files.newInputStream(tempMergedFile))) {
+                // 探测文件内容类型，如果无法确定则使用默认值
+                String contentType = Files.probeContentType(tempMergedFile);
+                if (contentType == null) {
+                    contentType = "application/octet-stream";
+                }
+                // 调用文件存储服务上传文件
+                fileStorageService.upload(objectName, is, contentType);
+            }
+
+
+            // 记录成功日志
+            log.info("Merge and upload success, uploadId={}, fileKey={}", uploadId, objectName);
+
+        } catch (Exception e) {
+            // 上传过程中发生异常，记录错误日志
+            log.error("Process merged file failed for uploadId: {}", uploadId, e);
+        } finally {
+            // 5. 清理临时文件和分片目录
+            // 删除临时合并文件
+            try {
+                Files.deleteIfExists(tempMergedFile);
+            } catch (IOException e) {
+                log.warn("Failed to delete temp merged file: {}", tempMergedFile);
+            }
+            // 调用清理方法删除分片目录
+            cleanup(uploadId);
+        }
     }
 
     /**
