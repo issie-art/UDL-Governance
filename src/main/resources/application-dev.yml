@@ -38,7 +38,8 @@ mybatis-plus:
 
 storage:
   minio:
+    callback-token: 123456 # 回调token
     endpoint: http://localhost:9000
     access-key: minioadmin
     secret-key: minioadmin
-    bucket-name: my-bucket # 存储桶名称
+    bucket-name: udl-governance # 存储桶名称
