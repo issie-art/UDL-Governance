@@ -3,8 +3,8 @@ package cn.udl.governance.service.impl;
 import cn.udl.governance.common.BaseResponse;
 import cn.udl.governance.common.ErrorCode;
 import cn.udl.governance.config.ChunkConfig;
-import cn.udl.governance.exception.BusinessException;
 import cn.udl.governance.enums.FileStatusEnum;
+import cn.udl.governance.exception.BusinessException;
 import cn.udl.governance.manager.FileStorageService;
 import cn.udl.governance.model.FileMetadata;
 import cn.udl.governance.model.dto.CompleteUploadRequest;
@@ -18,7 +18,6 @@ import cn.udl.governance.service.FileUploadService;
 import cn.udl.governance.utils.FileMergeExecutor;
 import cn.udl.governance.utils.RedisUtil;
 import cn.udl.governance.utils.ResultUtils;
-import cn.hutool.crypto.digest.DigestUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -93,6 +92,7 @@ public class FileUploadServiceImpl implements FileUploadService {
     @Override
     public BaseResponse<UploadChunkResponse> uploadChunk(UploadChunkRequest request, MultipartFile file) throws IOException {
 
+        log.info("uploadChunk request: {}", request);
         String uploadId = request.getUploadId();
         Integer chunkIndex = request.getChunkIndex();
         long maxChunkSize = chunkConfig.getSize();
@@ -153,6 +153,7 @@ public class FileUploadServiceImpl implements FileUploadService {
                 24,
                 TimeUnit.HOURS
         );
+        log.info("Chunk {} uploaded successfully", chunkIndex);
 
         UploadChunkResponse response = new UploadChunkResponse();
         response.setChunkNumber(chunkIndex);
@@ -252,15 +253,6 @@ public class FileUploadServiceImpl implements FileUploadService {
 
     /**
      * 合并文件的方法，并上传至 MinIO 存储，同步记录元数据
-     * 该方法主要完成以下功能：
-     * 1. 检查并获取上传目录
-     * 2. 处理文件名和扩展名
-     * 3. 创建临时合并文件并合并所有分片
-     * 4. 上传合并后的文件到 MinIO
-     * 5. 清理临时文件和分片目录
-     * @param uploadId 上传任务的唯一标识符
-     * @param totalChunks 分片的总数量
-     * @param fileName 原始文件名
      */
     private void mergeFile(String uploadId, int totalChunks, String fileName) {
 
@@ -310,7 +302,9 @@ public class FileUploadServiceImpl implements FileUploadService {
             // 构建在 MinIO 中的对象名称
             String objectName = "files/" + uploadId + "/" + fileName;
             // 使用 try-with-resources 确保输入流正确关闭
-            try (InputStream is = new BufferedInputStream(Files.newInputStream(tempMergedFile))) {
+            //增大缓冲池
+            int bufferSize = 2 * 1024 * 1024; // 2MB
+            try (InputStream is = new BufferedInputStream(Files.newInputStream(tempMergedFile), bufferSize)) {
                 // 探测文件内容类型，如果无法确定则使用默认值
                 String contentType = Files.probeContentType(tempMergedFile);
                 if (contentType == null) {
@@ -320,6 +314,8 @@ public class FileUploadServiceImpl implements FileUploadService {
                 fileStorageService.upload(objectName, is, contentType);
             }
 
+            //保存至数据库
+            saveFileMetadata(fileName, tempMergedFile, objectName);
 
             // 记录成功日志
             log.info("Merge and upload success, uploadId={}, fileKey={}", uploadId, objectName);
@@ -337,6 +333,45 @@ public class FileUploadServiceImpl implements FileUploadService {
             }
             // 调用清理方法删除分片目录
             cleanup(uploadId);
+        }
+    }
+
+    /**
+     * 保存文件信息到数据库
+     */
+    private boolean saveFileMetadata(String fileName, Path tempMergedFile, String objectName) {
+        try {
+            // 创建文件元数据对象
+            FileMetadata fileMetadata = new FileMetadata();
+
+            // 设置基本信息
+            fileMetadata.setFile_name(fileName);
+            fileMetadata.setFile_key(objectName);
+            fileMetadata.setStorage_type("MINIO");
+            fileMetadata.setStatus(FileStatusEnum.fromCode(1).getName());
+            fileMetadata.setCreated_at(new Date());
+
+            // 安全地获取文件大小
+            try {
+                fileMetadata.setFile_size(Files.size(tempMergedFile));
+            } catch (IOException e) {
+                log.error("Failed to get file size: {}", e.getMessage());
+                return false;
+            }
+
+            // 保存到数据库
+            boolean success = fileMetadataService.save(fileMetadata);
+            if (!success) {
+                log.error("Failed to save file metadata to database");
+                return false;
+            }
+
+            log.info("Successfully saved file metadata: fileName={}, fileKey={}", fileName, objectName);
+            return true;
+
+        } catch (Exception e) {
+            log.error("Error occurred while saving file metadata: {}", e.getMessage(), e);
+            return false;
         }
     }
 

@@ -12,7 +12,7 @@ import lombok.Data;
 @TableName(value ="file_metadata")
 @Data
 public class FileMetadata {
-    @TableId(type = IdType.ASSIGN_UUID)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     private String file_name;
