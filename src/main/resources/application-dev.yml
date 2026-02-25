@@ -9,21 +9,25 @@ spring:
       max-request-size: 10240MB
   application:
     name: file-upload
+
   #mysql
   datasource:
     url: jdbc:mysql://localhost:3306/udl_governance?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
     username: root
     password: jx20021023.
     driver-class-name: com.mysql.cj.jdbc.Driver
+
   #redis
   data:
     redis:
       host: localhost
       port: 6379
+
 # 日志配置
 logging:
   level:
     org.springframework.web: info
+
 # 分片策略配置
 file:
   chunk:
@@ -31,11 +35,34 @@ file:
     max-count: 10000  # 最大分片数量
     min-size: 1024  # 最小分片大小，1KB
     max-file-size: 10737418240  # 最大文件大小，10GB (10*1024*1024*1024)
+
+    # 文件生命周期配置
+  lifecycle:
+    # Active状态到过期的时长（天）
+    active-to-expired-days: 30
+    # Expired状态等待回收时长（天）
+    expired-to-recycled-days: 7
+    # Recycled状态保留时长（天）
+    recycled-to-destroyed-days: 7
+    # Active→Expired 检查任务执行间隔（毫秒），默认每小时执行一次
+    active-to-expired-check-interval: 3600000
+    # Expired→Recycled 检查任务执行间隔（毫秒），默认每天执行一次
+    expired-to-recycled-check-interval: 86400000
+    # Recycled→Destroyed 检查任务执行间隔（毫秒），默认每6小时执行一次
+    recycled-to-destroyed-check-interval: 21600000
+    # 是否启用自动过期检查
+    enable-auto-expiration: true
+    # 是否启用自动回收检查
+    enable-auto-recycle: true
+    # 是否启用自动销毁检查
+    enable-auto-destroy: true
+
 # MyBatis-Plus配置
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
+#MinIO配置
 storage:
   minio:
     callback-token: 123456 # 回调token

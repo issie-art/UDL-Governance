@@ -71,6 +71,7 @@ public class FileUploadServiceImpl implements FileUploadService {
         if (totalChunks <= 0) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "Invalid chunk calculation");
         }
+
         // 生成唯一的上传 uploadId
         String uploadId = generateUploadId();
 
@@ -213,13 +214,13 @@ public class FileUploadServiceImpl implements FileUploadService {
             }
         }
 
-
         CompleteUploadResponse response = new CompleteUploadResponse();
         if (!missingChunks.isEmpty()) {
             response.setStatus("INCOMPLETE");
             response.setMissingChunks(missingChunks);
             return ResultUtils.success(response);
         }
+
         // 所有分片齐全，提交异步合并
         response.setStatus("COMPLETED");
         fileMergeExecutor.submit(() -> mergeFile(uploadId, totalChunks, fileName));
@@ -345,15 +346,15 @@ public class FileUploadServiceImpl implements FileUploadService {
             FileMetadata fileMetadata = new FileMetadata();
 
             // 设置基本信息
-            fileMetadata.setFile_name(fileName);
-            fileMetadata.setFile_key(objectName);
-            fileMetadata.setStorage_type("MINIO");
+            fileMetadata.setFileName(fileName);
+            fileMetadata.setFileKey(objectName);
+            fileMetadata.setStorageType("MINIO");
             fileMetadata.setStatus(FileStatusEnum.fromCode(1).getName());
-            fileMetadata.setCreated_at(new Date());
+            fileMetadata.setCreatedAt(new Date());
 
             // 安全地获取文件大小
             try {
-                fileMetadata.setFile_size(Files.size(tempMergedFile));
+                fileMetadata.setFileSize(Files.size(tempMergedFile));
             } catch (IOException e) {
                 log.error("Failed to get file size: {}", e.getMessage());
                 return false;

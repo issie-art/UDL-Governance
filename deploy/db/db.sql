@@ -14,6 +14,11 @@ CREATE TABLE file_metadata (
 
     storage_type VARCHAR(32) COMMENT '存储类型',
     file_key VARCHAR(512) COMMENT '资源定位符',
+    
+    -- 生命周期管理字段
+    expiration_time DATETIME COMMENT '文件过期时间',
+    deleted_at DATETIME COMMENT '逻辑删除时间',
+    deleted_by VARCHAR(64) COMMENT '删除人标识(SYSTEM/USER:username)',
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

@@ -15,19 +15,24 @@ public class FileMetadata {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
-    private String file_name;
+    private String fileName;
 
-    private Long file_size;
+    private Long fileSize;
 
     private String hash;
 
     private String status;
 
-    private String storage_type;
+    private String storageType;
 
-    private String file_key;
+    private String fileKey;
+    
+    // 生命周期管理字段
+    private Date expirationTime;
+    private Date deletedAt;
+    private String deletedBy;
 
-    private Date created_at;
+    private Date createdAt;
 
-    private Date updated_at;
+    private Date updatedAt;
 }

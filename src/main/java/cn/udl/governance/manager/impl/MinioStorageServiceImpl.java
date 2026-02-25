@@ -98,15 +98,47 @@ public class MinioStorageServiceImpl implements FileStorageService {
 
     @Override
     public void delete(String objectName) {
+        // 参数校验
+        if (objectName == null || objectName.trim().isEmpty()) {
+            log.warn("Object name is null or empty, cannot delete");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "对象名称为空");
+        }
+        
         try {
+            // 先检查对象是否存在
+            StatObjectResponse stat = minioClient.statObject(
+                    StatObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .build()
+            );
+
+            // 执行删除
             minioClient.removeObject(
                     RemoveObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectName)
                             .build()
             );
+            
+            // 验证删除是否成功
+            try {
+                minioClient.statObject(
+                    StatObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .build()
+                );
+                // 如果还能获取到对象信息，说明删除失败
+                log.error("File still exists after deletion: {}", objectName);
+                throw new RuntimeException("File deletion verification failed");
+            } catch (Exception e) {
+                // 期望的异常，说明文件已被成功删除
+                log.info("Successfully deleted and verified file from MinIO: {}", objectName);
+            }
         } catch (Exception e) {
-            log.error("MinIO delete failed", e);
+            log.error("Failed to delete file from MinIO: {}", objectName, e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件删除失败: " + e.getMessage());
         }
     }
 }

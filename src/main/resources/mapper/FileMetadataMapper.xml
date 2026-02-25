@@ -6,19 +6,23 @@
 
     <resultMap id="BaseResultMap" type="cn.udl.governance.model.FileMetadata">
             <id property="id" column="id" jdbcType="BIGINT"/>
-            <result property="file_name" column="file_name" jdbcType="VARCHAR"/>
-            <result property="file_size" column="file_size" jdbcType="BIGINT"/>
+            <result property="fileName" column="file_name" jdbcType="VARCHAR"/>
+            <result property="fileSize" column="file_size" jdbcType="BIGINT"/>
             <result property="hash" column="hash" jdbcType="VARCHAR"/>
             <result property="status" column="status" jdbcType="VARCHAR"/>
-            <result property="storage_type" column="storage_type" jdbcType="VARCHAR"/>
-            <result property="file_key" column="file_key" jdbcType="VARCHAR"/>
-            <result property="created_at" column="created_at" jdbcType="TIMESTAMP"/>
-            <result property="updated_at" column="updated_at" jdbcType="TIMESTAMP"/>
+            <result property="storageType" column="storage_type" jdbcType="VARCHAR"/>
+            <result property="fileKey" column="file_key" jdbcType="VARCHAR"/>
+            <result property="expirationTime" column="expiration_time" jdbcType="TIMESTAMP"/>
+            <result property="deletedAt" column="deleted_at" jdbcType="TIMESTAMP"/>
+            <result property="deletedBy" column="deleted_by" jdbcType="VARCHAR"/>
+            <result property="createdAt" column="created_at" jdbcType="TIMESTAMP"/>
+            <result property="updatedAt" column="updated_at" jdbcType="TIMESTAMP"/>
     </resultMap>
 
     <sql id="Base_Column_List">
         id,file_name,file_size,
         hash,status,storage_type,
-        file_key,created_at,updated_at
+        file_key,expiration_time,deleted_at,
+        deleted_by,created_at,updated_at
     </sql>
 </mapper>
